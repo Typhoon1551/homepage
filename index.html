@@ -38,10 +38,49 @@ body::before {
   line-height: .9;
   margin: 1.5rem 0 1.5rem;
 }
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  margin: 1.5rem 0;
+}
+.top .title { margin: 0; }
+.status { text-align: right; }
+.bar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  margin-bottom: 1.75rem;
+}
+.clock {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.date { color: var(--dim); font-size: 1.05rem; margin-top: .35rem; }
+.weather {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .9rem 1.25rem;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  border-left: 4px solid #8fb8ff;
+  border-radius: 6px;
+}
+.wtemp { font-size: 2.4rem; font-weight: 600; line-height: 1; color: #8fb8ff; font-variant-numeric: tabular-nums; }
+.wcond { font-size: 1.1rem; }
+.wrange { color: var(--dim); font-size: .95rem; margin-top: .15rem; }
 #search {
   width: min(100%, 30rem);
   padding: .85rem 1.1rem;
-  margin-bottom: 1.75rem;
   font: inherit;
   font-size: 1.1rem;
   color: var(--ink);
@@ -113,8 +152,20 @@ body::before {
 </head>
 <body>
 <main class="page">
-  <h1 class="title">welcome</h1>
-  <input id="search" type="search" placeholder="type to filter, enter to open" autocomplete="off" autofocus aria-label="filter links">
+  <header class="top">
+    <h1 class="title">welcome</h1>
+    <div class="status">
+      <div id="clock" class="clock"></div>
+      <div id="date" class="date"></div>
+    </div>
+  </header>
+  <div class="bar">
+    <input id="search" type="search" placeholder="type to filter, enter to open" autocomplete="off" autofocus aria-label="filter links">
+    <div id="weather" class="weather" hidden>
+      <div id="wtemp" class="wtemp"></div>
+      <div><div id="wcond" class="wcond"></div><div id="wrange" class="wrange"></div></div>
+    </div>
+  </div>
   <div id="groups" class="groups"></div>
   <p id="empty" hidden></p>
 </main>
@@ -124,12 +175,12 @@ body::before {
 // Each link is [label, url]. Each group has its own accent color.
 const GROUPS = [
   { name: "school", color: "#f5b94a", links: [
-    ["gmail", "https://mail.google.com/"],
-    ["google drive", "https://drive.google.com/"],
-    ["calendar", "https://calendar.google.com/"],
-    ["canvas", "https://ncssm.instructure.com/"],
-    ["blackbaud", "https://ncssm.myschoolapp.com/app/"],
-    ["desmos", "https://www.desmos.com/calculator/"],
+    ["gmail", "https://mail.google.com/", "email inbox"],
+    ["google drive", "https://drive.google.com/", "drive files],
+    ["calendar", "https://calendar.google.com/", "schedule events"],
+    ["canvas", "https://ncssm.instructure.com/", "classes assignments"],
+    ["blackbaud", "https://ncssm.myschoolapp.com/app/", "grades progress"],
+    ["desmos", "https://www.desmos.com/calculator/", "graphing calculator"],
   ]},
   { name: "personal", color: "#5fd0e6", links: [
     ["youtube", "https://youtube.com/"],
@@ -138,6 +189,9 @@ const GROUPS = [
     ["music", "https://music.apple.com/"],
   ]},
 ];
+// Weather location (coordinates) and unit: "fahrenheit" or "celsius".
+const WEATHER = { lat: 35.745, lon: -81.685, unit: "fahrenheit" };
+// Each link is [label, url, optional extra search keywords].
 // ---- end of editable section ----
 
 const groupsEl = document.getElementById("groups");
@@ -153,7 +207,7 @@ for (const g of GROUPS) {
   h2.textContent = g.name;
   const ul = document.createElement("ul");
   ul.className = "links";
-  for (const [label, url] of g.links) {
+  for (const [label, url, keywords = ""] of g.links) {
     const host = new URL(url).hostname;
     const li = document.createElement("li");
     const a = document.createElement("a");
@@ -171,37 +225,48 @@ for (const g of GROUPS) {
     a.append(ico, span);
     li.append(a);
     ul.append(li);
-    items.push({ li, a, section, text: (label + " " + host).toLowerCase() });
+    items.push({ li, a, section, text: (label + " " + host + " " + keywords).toLowerCase() });
   }
   section.append(h2, ul);
   groupsEl.append(section);
 }
 
+let sel = -1;
 function visibleItems() { return items.filter(i => !i.li.hidden); }
+
+function mark() {
+  for (const i of items) i.li.classList.remove("top");
+  const cur = visibleItems()[sel];
+  if (cur) { cur.li.classList.add("top"); cur.a.scrollIntoView({ block: "nearest" }); }
+}
 
 function filter() {
   const q = search.value.trim().toLowerCase();
-  for (const i of items) {
-    i.li.hidden = q !== "" && !i.text.includes(q);
-    i.li.classList.remove("top");
-  }
+  for (const i of items) i.li.hidden = q !== "" && !i.text.includes(q);
   for (const s of groupsEl.children) {
     s.hidden = !items.some(i => i.section === s && !i.li.hidden);
   }
-  const vis = visibleItems();
-  if (q && vis.length) vis[0].li.classList.add("top");
-  emptyEl.hidden = !(q && !vis.length);
+  sel = q ? 0 : -1;
+  mark();
+  emptyEl.hidden = !(q && !visibleItems().length);
   emptyEl.textContent = "no links match \u201c" + search.value.trim() + "\u201d. press enter to search the web.";
 }
 
 search.addEventListener("input", filter);
 search.addEventListener("keydown", e => {
+  const vis = visibleItems();
   if (e.key === "Escape") { search.value = ""; filter(); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    if (!vis.length) return;
+    sel = e.key === "ArrowDown" ? (sel + 1) % vis.length : (sel <= 0 ? vis.length - 1 : sel - 1);
+    mark();
+    return;
+  }
   if (e.key !== "Enter") return;
   const q = search.value.trim();
-  if (!q) return;
-  const vis = visibleItems();
-  location.href = vis.length ? vis[0].a.href : "https://www.google.com/search?q=" + encodeURIComponent(q);
+  if (vis[sel]) location.href = vis[sel].a.href;
+  else if (q) location.href = "https://www.google.com/search?q=" + encodeURIComponent(q);
 });
 
 // start typing anywhere to focus the filter box
@@ -209,6 +274,52 @@ document.addEventListener("keydown", e => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
   if (document.activeElement !== search) search.focus();
 });
+
+// ---- clock ----
+const clockEl = document.getElementById("clock");
+const dateEl = document.getElementById("date");
+function tick() {
+  const d = new Date();
+  clockEl.textContent = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
+  dateEl.textContent = d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }).toLowerCase();
+}
+tick();
+setInterval(tick, 10000);
+
+// ---- weather (Open-Meteo, no API key) ----
+function wmo(c) {
+  if (c === 0) return "clear";
+  if (c === 1) return "mostly clear";
+  if (c === 2) return "partly cloudy";
+  if (c === 3) return "overcast";
+  if (c === 45 || c === 48) return "fog";
+  if (c >= 51 && c <= 57) return "drizzle";
+  if (c >= 61 && c <= 67) return "rain";
+  if (c >= 71 && c <= 77) return "snow";
+  if (c >= 80 && c <= 82) return "rain showers";
+  if (c === 85 || c === 86) return "snow showers";
+  if (c >= 95) return "thunderstorm";
+  return "";
+}
+async function loadWeather() {
+  try {
+    const url = "https://api.open-meteo.com/v1/forecast?latitude=" + WEATHER.lat + "&longitude=" + WEATHER.lon +
+      "&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min" +
+      "&temperature_unit=" + WEATHER.unit + "&timezone=auto&forecast_days=1";
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    const r = Math.round;
+    document.getElementById("wtemp").textContent = r(d.current.temperature_2m) + "\u00b0";
+    document.getElementById("wcond").textContent = wmo(d.current.weather_code);
+    document.getElementById("wrange").textContent = "high " + r(d.daily.temperature_2m_max[0]) + "\u00b0, low " + r(d.daily.temperature_2m_min[0]) + "\u00b0";
+    document.getElementById("weather").hidden = false;
+  } catch (err) {
+    document.getElementById("weather").hidden = true;
+  }
+}
+loadWeather();
+setInterval(loadWeather, 15 * 60 * 1000);
 </script>
 </body>
 </html>
